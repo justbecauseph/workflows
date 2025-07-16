@@ -1,11 +1,14 @@
 # .github/workflows/mikuexpo-monitor.yml
-name: MikuExpo 2025 Ticket Status Monitor
+name: MikuExpo Ticket Status Monitor
 
 on:
   schedule:
     # Check every 30 minutes
     - cron: '*/30 * * * *'
   workflow_dispatch: # Allow manual trigger
+
+env:
+  EXPECTED_STATUS: "Coming Soon"  # Change this to monitor for any specific text
 
 jobs:
   monitor:
@@ -59,7 +62,7 @@ jobs:
             console.log(`Current ticket status: "${ticketStatus}"`);
             
             // Read previous status if it exists
-            let previousStatus = 'Coming Soon';
+            let previousStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
             if (fs.existsSync('previous_status.txt')) {
               previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
             }
@@ -67,24 +70,26 @@ jobs:
             console.log(`Previous status: "${previousStatus}"`);
             
             // Save current status
-            fs.writeFileSync('previous_status.txt', ticketStatus || 'Coming Soon');
+            fs.writeFileSync('previous_status.txt', ticketStatus || process.env.EXPECTED_STATUS || 'Coming Soon');
             
-            // Check if status changed from "Coming Soon" to something else
-            if (previousStatus === 'Coming Soon' && ticketStatus && ticketStatus !== 'Coming Soon') {
-              console.log('🚨 STATUS CHANGED! Ticket status is no longer "Coming Soon"');
+            // Check if status changed from expected status to something else
+            const expectedStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
+            if (previousStatus === expectedStatus && ticketStatus && ticketStatus !== expectedStatus) {
+              console.log(`🚨 STATUS CHANGED! Ticket status is no longer "${expectedStatus}"`);
               console.log(`New status: "${ticketStatus}"`);
               
               // Set output for notification step
               process.env.STATUS_CHANGED = 'true';
               process.env.NEW_STATUS = ticketStatus;
+              process.env.PREVIOUS_STATUS = expectedStatus;
               
               // Write to GitHub Actions output
-              const output = `STATUS_CHANGED=true\nNEW_STATUS=${ticketStatus}`;
+              const output = `STATUS_CHANGED=true\nNEW_STATUS=${ticketStatus}\nPREVIOUS_STATUS=${expectedStatus}`;
               fs.writeFileSync(process.env.GITHUB_OUTPUT || '/dev/null', output);
               
               process.exit(0);
             } else if (ticketStatus) {
-              console.log('No change detected or status is still "Coming Soon"');
+              console.log(`No change detected or status is still "${expectedStatus}"`);
             } else {
               console.log('⚠️  Could not find the element or get its text');
               process.exit(1);
@@ -128,7 +133,7 @@ jobs:
               \"fields\": [
                 {
                   \"type\": \"mrkdwn\",
-                  \"text\": \"*Previous Status:*\nComing Soon\"
+                  \"text\": \"*Previous Status:*\n${{ env.PREVIOUS_STATUS || env.EXPECTED_STATUS }}\"
                 },
                 {
                   \"type\": \"mrkdwn\",
@@ -161,7 +166,7 @@ jobs:
       run: |
         MESSAGE="🎫 *MikuExpo Ticket Status Changed!*
         
-        📋 *Previous Status:* Coming Soon
+        📋 *Previous Status:* ${{ env.PREVIOUS_STATUS || env.EXPECTED_STATUS }}
         ✨ *New Status:* ${{ env.NEW_STATUS }}
         
         🎉 Tickets might be available now!
