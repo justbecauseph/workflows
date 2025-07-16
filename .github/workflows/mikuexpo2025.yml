@@ -4,12 +4,12 @@ name: MikuExpo Ticket Status Monitor
 on:
   schedule:
     # Check every 30 minutes
-    - cron: '*/30 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
   monitor:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - name: Checkout repository
