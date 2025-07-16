@@ -1,0 +1,176 @@
+# .github/workflows/mikuexpo-monitor.yml
+name: MikuExpo 2025 Ticket Status Monitor
+
+on:
+  schedule:
+    # Check every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies
+      run: |
+        npm install puppeteer
+        
+    - name: Check ticket status
+      run: |
+        cat > check_status.js << 'EOF'
+        const puppeteer = require('puppeteer');
+        const fs = require('fs');
+        
+        (async () => {
+          const browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+          });
+          
+          const page = await browser.newPage();
+          
+          try {
+            console.log('Navigating to MikuExpo website...');
+            await page.goto('https://mikuexpo.com/asia2025/', { 
+              waitUntil: 'networkidle2',
+              timeout: 30000 
+            });
+            
+            // Wait for the element to be present
+            await page.waitForSelector('#concert > div.section_inner > div.concert_list_wrapper > div > ul > li:nth-child(4) > div.ticket > div > p', {
+              timeout: 10000
+            });
+            
+            // Get the text content
+            const ticketStatus = await page.evaluate(() => {
+              const element = document.querySelector('#concert > div.section_inner > div.concert_list_wrapper > div > ul > li:nth-child(4) > div.ticket > div > p');
+              return element ? element.textContent.trim() : null;
+            });
+            
+            console.log(`Current ticket status: "${ticketStatus}"`);
+            
+            // Read previous status if it exists
+            let previousStatus = 'Coming Soon';
+            if (fs.existsSync('previous_status.txt')) {
+              previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
+            }
+            
+            console.log(`Previous status: "${previousStatus}"`);
+            
+            // Save current status
+            fs.writeFileSync('previous_status.txt', ticketStatus || 'Coming Soon');
+            
+            // Check if status changed from "Coming Soon" to something else
+            if (previousStatus === 'Coming Soon' && ticketStatus && ticketStatus !== 'Coming Soon') {
+              console.log('🚨 STATUS CHANGED! Ticket status is no longer "Coming Soon"');
+              console.log(`New status: "${ticketStatus}"`);
+              
+              // Set output for notification step
+              process.env.STATUS_CHANGED = 'true';
+              process.env.NEW_STATUS = ticketStatus;
+              
+              // Write to GitHub Actions output
+              const output = `STATUS_CHANGED=true\nNEW_STATUS=${ticketStatus}`;
+              fs.writeFileSync(process.env.GITHUB_OUTPUT || '/dev/null', output);
+              
+              process.exit(0);
+            } else if (ticketStatus) {
+              console.log('No change detected or status is still "Coming Soon"');
+            } else {
+              console.log('⚠️  Could not find the element or get its text');
+              process.exit(1);
+            }
+            
+          } catch (error) {
+            console.error('Error:', error);
+            process.exit(1);
+          } finally {
+            await browser.close();
+          }
+        })();
+        EOF
+        
+        node check_status.js
+        
+    - name: Commit status file
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add previous_status.txt
+        git diff --staged --quiet || git commit -m "Update ticket status tracking"
+        git push
+        
+    - name: Send Slack notification
+      if: env.STATUS_CHANGED == 'true'
+      run: |
+        curl -X POST -H 'Content-type: application/json' \
+        --data "{
+          \"text\": \"🎫 MikuExpo Ticket Status Changed!\",
+          \"blocks\": [
+            {
+              \"type\": \"header\",
+              \"text\": {
+                \"type\": \"plain_text\",
+                \"text\": \"🎫 MikuExpo Ticket Status Update\"
+              }
+            },
+            {
+              \"type\": \"section\",
+              \"fields\": [
+                {
+                  \"type\": \"mrkdwn\",
+                  \"text\": \"*Previous Status:*\nComing Soon\"
+                },
+                {
+                  \"type\": \"mrkdwn\",
+                  \"text\": \"*New Status:*\n${{ env.NEW_STATUS }}\"
+                }
+              ]
+            },
+            {
+              \"type\": \"section\",
+              \"text\": {
+                \"type\": \"mrkdwn\",
+                \"text\": \"🎉 *Tickets might be available now!*\n\n<https://mikuexpo.com/asia2025/|Check MikuExpo Website>\"
+              }
+            },
+            {
+              \"type\": \"context\",
+              \"elements\": [
+                {
+                  \"type\": \"mrkdwn\",
+                  \"text\": \"Checked at: $(date -u)\"
+                }
+              ]
+            }
+          ]
+        }" \
+        ${{ secrets.SLACK_WEBHOOK_URL }}
+        
+    - name: Send Telegram notification
+      if: env.STATUS_CHANGED == 'true'
+      run: |
+        MESSAGE="🎫 *MikuExpo Ticket Status Changed!*
+        
+        📋 *Previous Status:* Coming Soon
+        ✨ *New Status:* ${{ env.NEW_STATUS }}
+        
+        🎉 Tickets might be available now!
+        
+        🔗 [Check MikuExpo Website](https://mikuexpo.com/asia2025/)
+        
+        ⏰ Checked at: $(date -u)"
+        
+        curl -X POST \
+        -H 'Content-Type: application/json' \
+        -d "{\"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\", \"text\": \"$MESSAGE\", \"parse_mode\": \"Markdown\", \"disable_web_page_preview\": false}" \
+        https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage
