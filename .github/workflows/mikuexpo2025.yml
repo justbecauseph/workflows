@@ -72,7 +72,7 @@ jobs:
             fs.writeFileSync('previous_status.txt', ticketStatus || '');
             
             // Check if status changed from previous to current
-            if (previousStatus !== null && ticketStatus !== previousStatus) {
+            if (true) {
               console.log(`🚨 STATUS CHANGED! Status changed from "${previousStatus}" to "${ticketStatus}"`);
               
               // Write to GitHub Actions output file
