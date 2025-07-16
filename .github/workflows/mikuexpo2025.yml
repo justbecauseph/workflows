@@ -8,7 +8,7 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 env:
-  EXPECTED_STATUS: "Coming Soon"  # Change this to monitor for any specific text
+  EXPECTED_STATUS: "Coming Soon TEST"  # Change this to monitor for any specific text
 
 jobs:
   monitor:
@@ -62,7 +62,7 @@ jobs:
             console.log(`Current ticket status: "${ticketStatus}"`);
             
             // Read previous status if it exists
-            let previousStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
+            let previousStatus = process.env.EXPECTED_STATUS;
             if (fs.existsSync('previous_status.txt')) {
               previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
             }
@@ -70,10 +70,10 @@ jobs:
             console.log(`Previous status: "${previousStatus}"`);
             
             // Save current status
-            fs.writeFileSync('previous_status.txt', ticketStatus || process.env.EXPECTED_STATUS || 'Coming Soon');
+            fs.writeFileSync('previous_status.txt', ticketStatus || process.env.EXPECTED_STATUS);
             
             // Check if status changed from expected status to something else
-            const expectedStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
+            const expectedStatus = process.env.EXPECTED_STATUS;
             if (previousStatus === expectedStatus && ticketStatus && ticketStatus !== expectedStatus) {
               console.log(`🚨 STATUS CHANGED! Ticket status is no longer "${expectedStatus}"`);
               console.log(`New status: "${ticketStatus}"`);
