@@ -2,6 +2,8 @@
 
 ## MikuExpo 2025 Ticket Status Monitor
 
+[![MikuExpo Ticket Status Monitor](https://github.com/justbecauseph/workflows/actions/workflows/mikuexpo2025.yml/badge.svg)](https://github.com/justbecauseph/workflows/actions/workflows/mikuexpo2025.yml)
+
 This repository includes a GitHub Actions workflow that automatically monitors the ticket status for MikuExpo 2025 (Asia) and sends notifications when the status changes.
 
 ### Features
