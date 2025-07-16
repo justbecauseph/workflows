@@ -78,7 +78,7 @@ jobs:
             // OR if current status is different from expected status but previous status matched
             const expectedStatus = process.env.EXPECTED_STATUS;
             
-            if (true) {
+            if (ticketStatus === expectedStatus && previousStatus !== expectedStatus) {
               console.log(`🚨 STATUS CHANGED TO EXPECTED! Status changed to "${expectedStatus}"`);
               console.log(`Previous status: "${previousStatus}"`);
               
