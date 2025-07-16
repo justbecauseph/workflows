@@ -8,7 +8,7 @@ This repository includes a GitHub Actions workflow that automatically monitors t
 
 ### Features
 
-- Checks the official [MikuExpo Asia 2025 website](https://mikuexpo.com/asia2025/) every 30 minutes.
+- Checks the official [MikuExpo Asia 2025 website](https://mikuexpo.com/asia2025/) every 15 minutes.
 - Uses Puppeteer to scrape the ticket status.
 - Tracks status changes from current status and checkes via a cron schedule.
 - Sends notifications to Slack and Telegram when status has changed.
