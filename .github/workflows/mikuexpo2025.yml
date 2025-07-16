@@ -7,9 +7,6 @@ on:
     - cron: '*/30 * * * *'
   workflow_dispatch: # Allow manual trigger
 
-env:
-  EXPECTED_STATUS: "Coming Soon"  # Change this to monitor for any specific text
-
 jobs:
   monitor:
     runs-on: ubuntu-latest
@@ -63,24 +60,20 @@ jobs:
             console.log(`Current ticket status: "${ticketStatus}"`);
             
             // Read previous status if it exists
-            let previousStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
+            let previousStatus = null;
             if (fs.existsSync('previous_status.txt')) {
               previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
             }
             
             console.log(`Previous status: "${previousStatus}"`);
-            console.log(`Expected status to watch for: "${process.env.EXPECTED_STATUS}"`);
+            console.log(`Current status: "${ticketStatus}"`);
             
             // Save current status
             fs.writeFileSync('previous_status.txt', ticketStatus || '');
             
-            // Check if current status matches expected status but previous status was different
-            // OR if current status is different from expected status but previous status matched
-            const expectedStatus = process.env.EXPECTED_STATUS;
-            
-            if (ticketStatus === expectedStatus && previousStatus !== expectedStatus) {
-              console.log(`🚨 STATUS CHANGED TO EXPECTED! Status changed to "${expectedStatus}"`);
-              console.log(`Previous status: "${previousStatus}"`);
+            // Check if status changed from previous to current
+            if (previousStatus !== null && ticketStatus !== previousStatus) {
+              console.log(`🚨 STATUS CHANGED! Status changed from "${previousStatus}" to "${ticketStatus}"`);
               
               // Write to GitHub Actions output file
               const fs = require('fs');
@@ -92,21 +85,16 @@ jobs:
               }
               
               process.exit(0);
-            } else if (ticketStatus !== expectedStatus && previousStatus === expectedStatus) {
-              console.log(`🚨 STATUS CHANGED FROM EXPECTED! Status changed from "${expectedStatus}" to "${ticketStatus}"`);
-              
+            } else if (previousStatus === null) {
+              console.log(`📝 First run - saving initial status: "${ticketStatus}"`);
               // Write to GitHub Actions output file
               const fs = require('fs');
               const outputFile = process.env.GITHUB_OUTPUT;
               if (outputFile) {
-                fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
-                fs.appendFileSync(outputFile, `NEW_STATUS=${ticketStatus}\n`);
-                fs.appendFileSync(outputFile, `PREVIOUS_STATUS=${previousStatus}\n`);
+                fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
               }
-              
-              process.exit(0);
             } else if (ticketStatus) {
-              console.log(`No change detected. Current: "${ticketStatus}", Expected: "${expectedStatus}"`);
+              console.log(`✅ No change detected. Status remains: "${ticketStatus}"`);
               // Write to GitHub Actions output file
               const fs = require('fs');
               const outputFile = process.env.GITHUB_OUTPUT;
