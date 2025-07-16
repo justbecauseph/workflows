@@ -3,8 +3,8 @@ name: MikuExpo Ticket Status Monitor
 
 on:
   schedule:
-    # Check every 30 minutes
-    - cron: '*/5 * * * *'
+    # Check every 15 minutes
+    - cron: '*/15 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
