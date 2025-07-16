@@ -8,7 +8,7 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 env:
-  EXPECTED_STATUS: "Available"  # Change this to monitor for any specific text
+  EXPECTED_STATUS: "Coming Soon"  # Change this to monitor for any specific text
 
 jobs:
   monitor:
@@ -76,9 +76,9 @@ jobs:
             
             // Check if current status matches expected status but previous status was different
             // OR if current status is different from expected status but previous status matched
-            const expectedStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
+            const expectedStatus = process.env.EXPECTED_STATUS;
             
-            if (ticketStatus === expectedStatus && previousStatus !== expectedStatus) {
+            if (true) {
               console.log(`🚨 STATUS CHANGED TO EXPECTED! Status changed to "${expectedStatus}"`);
               console.log(`Previous status: "${previousStatus}"`);
               
