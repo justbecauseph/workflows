@@ -8,7 +8,7 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 env:
-  EXPECTED_STATUS: "Coming Soon TEST"  # Change this to monitor for any specific text
+  EXPECTED_STATUS: "Available"  # Change this to monitor for any specific text
 
 jobs:
   monitor:
@@ -28,6 +28,7 @@ jobs:
         npm install puppeteer
         
     - name: Check ticket status
+      id: check_status
       run: |
         cat > check_status.js << 'EOF'
         const puppeteer = require('puppeteer');
@@ -62,34 +63,56 @@ jobs:
             console.log(`Current ticket status: "${ticketStatus}"`);
             
             // Read previous status if it exists
-            let previousStatus = "";
+            let previousStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
             if (fs.existsSync('previous_status.txt')) {
               previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
             }
             
             console.log(`Previous status: "${previousStatus}"`);
+            console.log(`Expected status to watch for: "${process.env.EXPECTED_STATUS}"`);
             
             // Save current status
-            fs.writeFileSync('previous_status.txt', ticketStatus);
+            fs.writeFileSync('previous_status.txt', ticketStatus || '');
             
-            // Check if status changed from expected status to something else
-            const expectedStatus = process.env.EXPECTED_STATUS;
-            if (previousStatus !== expectedStatus) {
-              console.log(`🚨 STATUS CHANGED! Ticket status is no longer "${expectedStatus}"`);
-              console.log(`New status: "${ticketStatus}"`);
+            // Check if current status matches expected status but previous status was different
+            // OR if current status is different from expected status but previous status matched
+            const expectedStatus = process.env.EXPECTED_STATUS || 'Coming Soon';
+            
+            if (ticketStatus === expectedStatus && previousStatus !== expectedStatus) {
+              console.log(`🚨 STATUS CHANGED TO EXPECTED! Status changed to "${expectedStatus}"`);
+              console.log(`Previous status: "${previousStatus}"`);
               
-              // Set output for notification step
-              process.env.STATUS_CHANGED = 'true';
-              process.env.NEW_STATUS = ticketStatus;
-              process.env.PREVIOUS_STATUS = expectedStatus;
+              // Write to GitHub Actions output file
+              const fs = require('fs');
+              const outputFile = process.env.GITHUB_OUTPUT;
+              if (outputFile) {
+                fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
+                fs.appendFileSync(outputFile, `NEW_STATUS=${ticketStatus}\n`);
+                fs.appendFileSync(outputFile, `PREVIOUS_STATUS=${previousStatus}\n`);
+              }
               
-              // Write to GitHub Actions output
-              const output = `STATUS_CHANGED=true\nNEW_STATUS=${ticketStatus}\nPREVIOUS_STATUS=${expectedStatus}`;
-              fs.writeFileSync(process.env.GITHUB_OUTPUT || '/dev/null', output);
+              process.exit(0);
+            } else if (ticketStatus !== expectedStatus && previousStatus === expectedStatus) {
+              console.log(`🚨 STATUS CHANGED FROM EXPECTED! Status changed from "${expectedStatus}" to "${ticketStatus}"`);
+              
+              // Write to GitHub Actions output file
+              const fs = require('fs');
+              const outputFile = process.env.GITHUB_OUTPUT;
+              if (outputFile) {
+                fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
+                fs.appendFileSync(outputFile, `NEW_STATUS=${ticketStatus}\n`);
+                fs.appendFileSync(outputFile, `PREVIOUS_STATUS=${previousStatus}\n`);
+              }
               
               process.exit(0);
             } else if (ticketStatus) {
-              console.log(`No change detected or status is still "${expectedStatus}"`);
+              console.log(`No change detected. Current: "${ticketStatus}", Expected: "${expectedStatus}"`);
+              // Write to GitHub Actions output file
+              const fs = require('fs');
+              const outputFile = process.env.GITHUB_OUTPUT;
+              if (outputFile) {
+                fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
+              }
             } else {
               console.log('⚠️  Could not find the element or get its text');
               process.exit(1);
@@ -115,7 +138,7 @@ jobs:
         git push
         
     - name: Send Slack notification
-      if: env.STATUS_CHANGED == 'true'
+      if: steps.check_status.outputs.STATUS_CHANGED == 'true'
       run: |
         curl -X POST -H 'Content-type: application/json' \
         --data "{
@@ -133,11 +156,11 @@ jobs:
               \"fields\": [
                 {
                   \"type\": \"mrkdwn\",
-                  \"text\": \"*Previous Status:*\n${{ env.PREVIOUS_STATUS || env.EXPECTED_STATUS }}\"
+                  \"text\": \"*Previous Status:*\n${{ steps.check_status.outputs.PREVIOUS_STATUS }}\"
                 },
                 {
                   \"type\": \"mrkdwn\",
-                  \"text\": \"*New Status:*\n${{ env.NEW_STATUS }}\"
+                  \"text\": \"*New Status:*\n${{ steps.check_status.outputs.NEW_STATUS }}\"
                 }
               ]
             },
@@ -162,12 +185,12 @@ jobs:
         ${{ secrets.SLACK_WEBHOOK_URL }}
         
     - name: Send Telegram notification
-      if: env.STATUS_CHANGED == 'true'
+      if: steps.check_status.outputs.STATUS_CHANGED == 'true'
       run: |
         MESSAGE="🎫 *MikuExpo Ticket Status Changed!*
         
-        📋 *Previous Status:* ${{ env.PREVIOUS_STATUS || env.EXPECTED_STATUS }}
-        ✨ *New Status:* ${{ env.NEW_STATUS }}
+        📋 *Previous Status:* ${{ steps.check_status.outputs.PREVIOUS_STATUS }}
+        ✨ *New Status:* ${{ steps.check_status.outputs.NEW_STATUS }}
         
         🎉 Tickets might be available now!
         
