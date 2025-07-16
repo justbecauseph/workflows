@@ -62,7 +62,7 @@ jobs:
             console.log(`Current ticket status: "${ticketStatus}"`);
             
             // Read previous status if it exists
-            let previousStatus = process.env.EXPECTED_STATUS;
+            let previousStatus = "";
             if (fs.existsSync('previous_status.txt')) {
               previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
             }
@@ -70,11 +70,11 @@ jobs:
             console.log(`Previous status: "${previousStatus}"`);
             
             // Save current status
-            fs.writeFileSync('previous_status.txt', ticketStatus || process.env.EXPECTED_STATUS);
+            fs.writeFileSync('previous_status.txt', ticketStatus);
             
             // Check if status changed from expected status to something else
             const expectedStatus = process.env.EXPECTED_STATUS;
-            if (previousStatus === expectedStatus && ticketStatus && ticketStatus !== expectedStatus) {
+            if (previousStatus !== expectedStatus) {
               console.log(`🚨 STATUS CHANGED! Ticket status is no longer "${expectedStatus}"`);
               console.log(`New status: "${ticketStatus}"`);
               
