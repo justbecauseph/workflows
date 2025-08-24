@@ -42,25 +42,32 @@ jobs:
               waitUntil: 'networkidle2',
               timeout: 30000 
             });
-            
+
             // Get the ticket status for a specific city
             const getTicketStatusByCity = async (city) => {
               return await page.evaluate((city) => {
                 const concertList = document.querySelectorAll('#concert .concert_list_wrapper li');
                 for (const item of concertList) {
-                  const cityElement = item.querySelector('.city p');
-                  if (cityElement && cityElement.textContent.trim().toLowerCase() === city.toLowerCase()) {
+                  const itemText = item.textContent || '';
+                  const cityRegex = new RegExp(`\\b${city}\\b`, 'i');
+                  if (cityRegex.test(itemText)) {
                     const ticketElement = item.querySelector('.ticket a, .ticket p');
-                    return ticketElement ? ticketElement.textContent.trim() : 'Not Found';
+                    if (ticketElement) {
+                      return ticketElement.textContent.trim();
+                    }
+                    if (itemText.includes('Coming Soon')) {
+                      return 'Coming Soon';
+                    }
+                    return 'Ticket Info Not Found';
                   }
                 }
                 return 'City Not Found';
               }, city);
             };
             
-            const cities = ["Manila"];
+            const cities = ["Bangkok", "Hong Kong", "Jakarta", "Manila", "Singapore", "Kuala Lumpur", "Taipei", "Seoul"];
             const statuses = {};
-
+            
             for (const city of cities) {
               console.log(`Checking ticket status for ${city}...`);
               const status = await getTicketStatusByCity(city);
@@ -88,24 +95,46 @@ jobs:
               console.log(`Previous: ${previousStatus}`);
               console.log(`Current: ${combinedStatus}`);
 
-              const prev = JSON.parse(previousStatus);
+              let prev;
+              try {
+                prev = JSON.parse(previousStatus);
+              } catch (e) {
+                console.log('Could not parse previous status as JSON. Assuming old format and notifying about the change.');
+                let changes = `Status format changed from plain text to JSON.\nPrevious: \`${previousStatus}\`\nNew: \`${combinedStatus}\``;
+                changes = changes.replace(/\n/g, '\\n');
+                const outputFile = process.env.GITHUB_OUTPUT;
+                if (outputFile) {
+                  fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
+                  fs.appendFileSync(outputFile, `CHANGES=${changes}\n`);
+                }
+                process.exit(0);
+              }
+              
               const curr = JSON.parse(combinedStatus);
 
               const changes = cities.map(city => {
                 if (prev[city] !== curr[city]) {
-                  return `*${city}*: ~${prev[city]}~ → *${curr[city]}*`;
+                  const prevStatus = prev[city] || 'N/A';
+                  return `*${city}*: ~${prevStatus}~ → *${curr[city]}*`;
                 }
                 return null;
               }).filter(Boolean).join('\\n');
-              
-              // Set GitHub Actions output
-              const outputFile = process.env.GITHUB_OUTPUT;
-              if (outputFile) {
-                fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
-                fs.appendFileSync(outputFile, `CHANGES=${changes}\n`);
-              }
-              process.exit(0);
 
+              if (changes) {
+                  console.log('Change detected in tracked cities.');
+                  const outputFile = process.env.GITHUB_OUTPUT;
+                  if (outputFile) {
+                    fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
+                    fs.appendFileSync(outputFile, `CHANGES=${changes}\n`);
+                  }
+                  process.exit(0);
+              } else {
+                  console.log('✅ No value change detected in tracked cities.');
+                  const outputFile = process.env.GITHUB_OUTPUT;
+                  if (outputFile) {
+                    fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
+                  }
+              }
             } else if (!previousStatus) {
               console.log('📝 First run, saving initial status.');
               const outputFile = process.env.GITHUB_OUTPUT;
