@@ -58,7 +58,7 @@ jobs:
               }, city);
             };
             
-            const cities = ["Taipei", "Seoul"];
+            const cities = ["Manila"];
             const statuses = {};
 
             for (const city of cities) {
