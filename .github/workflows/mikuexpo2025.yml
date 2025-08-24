@@ -42,65 +42,111 @@ jobs:
               waitUntil: 'networkidle2',
               timeout: 30000 
             });
+
+            // Get the ticket status for a specific city
+            const getTicketStatusByCity = async (city) => {
+              return await page.evaluate((city) => {
+                const concertList = document.querySelectorAll('#concert .concert_list_wrapper li');
+                for (const item of concertList) {
+                  const itemText = item.textContent || '';
+                  const cityRegex = new RegExp(`\\b${city}\\b`, 'i');
+                  if (cityRegex.test(itemText)) {
+                    const ticketElement = item.querySelector('.ticket a, .ticket p');
+                    if (ticketElement) {
+                      return ticketElement.textContent.trim();
+                    }
+                    if (itemText.includes('Coming Soon')) {
+                      return 'Coming Soon';
+                    }
+                    return 'Ticket Info Not Found';
+                  }
+                }
+                return 'City Not Found';
+              }, city);
+            };
             
-            // Wait for the element to be present
-            await page.waitForSelector('#concert > div.section_inner > div.concert_list_wrapper > div > ul > li:nth-child(4) > div.ticket > div > p', {
-              timeout: 10000
-            });
+            const cities = ["Bangkok", "Hong Kong", "Jakarta", "Manila", "Singapore", "Kuala Lumpur", "Taipei", "Seoul"];
+            const statuses = {};
             
-            // Get the text content
-            const ticketStatus = await page.evaluate(() => {
-              const element = document.querySelector('#concert > div.section_inner > div.concert_list_wrapper > div > ul > li:nth-child(4) > div.ticket > div > p');
-              return element ? element.textContent.trim() : null;
-            });
+            for (const city of cities) {
+              console.log(`Checking ticket status for ${city}...`);
+              const status = await getTicketStatusByCity(city);
+              statuses[city] = status;
+              console.log(`Status for ${city}: ${status}`);
+            }
             
-            console.log(`Current ticket status: "${ticketStatus}"`);
+            // Combine statuses into a single string for storage and comparison
+            const combinedStatus = JSON.stringify(statuses);
+            console.log(`Combined current status: ${combinedStatus}`);
             
             // Read previous status if it exists
             let previousStatus = null;
             if (fs.existsSync('previous_status.txt')) {
               previousStatus = fs.readFileSync('previous_status.txt', 'utf8').trim();
             }
+            console.log(`Previous combined status: ${previousStatus}`);
             
-            console.log(`Previous status: "${previousStatus}"`);
-            console.log(`Current status: "${ticketStatus}"`);
+            // Save current combined status
+            fs.writeFileSync('previous_status.txt', combinedStatus);
             
-            // Save current status
-            fs.writeFileSync('previous_status.txt', ticketStatus || '');
-            
-            // Check if status changed from previous to current
-            if (previousStatus !== null && ticketStatus !== previousStatus) {
-              console.log(`🚨 STATUS CHANGED! Status changed from "${previousStatus}" to "${ticketStatus}"`);
-              
-              // Write to GitHub Actions output file
-              const fs = require('fs');
-              const outputFile = process.env.GITHUB_OUTPUT;
-              if (outputFile) {
-                fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
-                fs.appendFileSync(outputFile, `NEW_STATUS=${ticketStatus}\n`);
-                fs.appendFileSync(outputFile, `PREVIOUS_STATUS=${previousStatus}\n`);
+            // Check if status changed
+            if (previousStatus && combinedStatus !== previousStatus) {
+              console.log(`🚨 STATUS CHANGED!`);
+              console.log(`Previous: ${previousStatus}`);
+              console.log(`Current: ${combinedStatus}`);
+
+              let prev;
+              try {
+                prev = JSON.parse(previousStatus);
+              } catch (e) {
+                console.log('Could not parse previous status as JSON. Assuming old format and notifying about the change.');
+                let changes = `Status format changed from plain text to JSON.\nPrevious: \`${previousStatus}\`\nNew: \`${combinedStatus}\``;
+                changes = changes.replace(/\n/g, '\\n');
+                const outputFile = process.env.GITHUB_OUTPUT;
+                if (outputFile) {
+                  fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
+                  fs.appendFileSync(outputFile, `CHANGES=${changes}\n`);
+                }
+                process.exit(0);
               }
               
-              process.exit(0);
-            } else if (previousStatus === null) {
-              console.log(`📝 First run - saving initial status: "${ticketStatus}"`);
-              // Write to GitHub Actions output file
-              const fs = require('fs');
-              const outputFile = process.env.GITHUB_OUTPUT;
-              if (outputFile) {
-                fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
+              const curr = JSON.parse(combinedStatus);
+
+              const changes = cities.map(city => {
+                if (prev[city] !== curr[city]) {
+                  const prevStatus = prev[city] || 'N/A';
+                  return `*${city}*: ~${prevStatus}~ → *${curr[city]}*`;
+                }
+                return null;
+              }).filter(Boolean).join('\\n');
+
+              if (changes) {
+                  console.log('Change detected in tracked cities.');
+                  const outputFile = process.env.GITHUB_OUTPUT;
+                  if (outputFile) {
+                    fs.appendFileSync(outputFile, `STATUS_CHANGED=true\n`);
+                    fs.appendFileSync(outputFile, `CHANGES=${changes}\n`);
+                  }
+                  process.exit(0);
+              } else {
+                  console.log('✅ No value change detected in tracked cities.');
+                  const outputFile = process.env.GITHUB_OUTPUT;
+                  if (outputFile) {
+                    fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
+                  }
               }
-            } else if (ticketStatus) {
-              console.log(`✅ No change detected. Status remains: "${ticketStatus}"`);
-              // Write to GitHub Actions output file
-              const fs = require('fs');
+            } else if (!previousStatus) {
+              console.log('📝 First run, saving initial status.');
               const outputFile = process.env.GITHUB_OUTPUT;
               if (outputFile) {
                 fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
               }
             } else {
-              console.log('⚠️  Could not find the element or get its text');
-              process.exit(1);
+              console.log('✅ No change detected.');
+              const outputFile = process.env.GITHUB_OUTPUT;
+              if (outputFile) {
+                fs.appendFileSync(outputFile, `STATUS_CHANGED=false\n`);
+              }
             }
             
           } catch (error) {
@@ -138,16 +184,10 @@ jobs:
             },
             {
               \"type\": \"section\",
-              \"fields\": [
-                {
-                  \"type\": \"mrkdwn\",
-                  \"text\": \"*Previous Status:*\n${{ steps.check_status.outputs.PREVIOUS_STATUS }}\"
-                },
-                {
-                  \"type\": \"mrkdwn\",
-                  \"text\": \"*New Status:*\n${{ steps.check_status.outputs.NEW_STATUS }}\"
-                }
-              ]
+              "text": {
+                "type": "mrkdwn",
+                "text": "${{ steps.check_status.outputs.CHANGES }}"
+              }
             },
             {
               \"type\": \"section\",
@@ -174,8 +214,7 @@ jobs:
       run: |
         MESSAGE="🎫 *MikuExpo Ticket Status Changed!*
         
-        📋 *Previous Status:* ${{ steps.check_status.outputs.PREVIOUS_STATUS }}
-        ✨ *New Status:* ${{ steps.check_status.outputs.NEW_STATUS }}
+        ${{ steps.check_status.outputs.CHANGES }}
         
         🎉 Tickets might be available now!
         
