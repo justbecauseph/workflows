@@ -171,58 +171,31 @@ jobs:
     - name: Send Slack notification
       if: steps.check_status.outputs.STATUS_CHANGED == 'true'
       run: |
-        curl -X POST -H 'Content-type: application/json' \
-        --data "{
-          \"text\": \"🎫 MikuExpo Ticket Status Changed!\",
-          \"blocks\": [
-            {
-              \"type\": \"header\",
-              \"text\": {
-                \"type\": \"plain_text\",
-                \"text\": \"🎫 MikuExpo Ticket Status Update\"
-              }
-            },
-            {
-              \"type\": \"section\",
-              "text": {
-                "type": "mrkdwn",
-                "text": "${{ steps.check_status.outputs.CHANGES }}"
-              }
-            },
-            {
-              \"type\": \"section\",
-              \"text\": {
-                \"type\": \"mrkdwn\",
-                \"text\": \"🎉 *Tickets might be available now!*\n\n<https://mikuexpo.com/asia2025/|Check MikuExpo Website>\"
-              }
-            },
-            {
-              \"type\": \"context\",
-              \"elements\": [
-                {
-                  \"type\": \"mrkdwn\",
-                  \"text\": \"Checked at: $(date -u)\"
-                }
-              ]
-            }
+        cat << EOF > slack_payload.json
+        {
+          "text": "🎫 MikuExpo Ticket Status Changed!",
+          "blocks": [
+            { "type": "header", "text": { "type": "plain_text", "text": "🎫 MikuExpo Ticket Status Update" } },
+            { "type": "section", "text": { "type": "mrkdwn", "text": "${{ steps.check_status.outputs.CHANGES }}" } },
+            { "type": "section", "text": { "type": "mrkdwn", "text": "🎉 *Tickets might be available now!*\\n\\n<https://mikuexpo.com/asia2025/|Check MikuExpo Website>" } },
+            { "type": "context", "elements": [ { "type": "mrkdwn", "text": "Checked at: $(date -u)" } ] }
           ]
-        }" \
-        ${{ secrets.SLACK_WEBHOOK_URL }}
+        }
+        EOF
+        curl -X POST -H 'Content-type: application/json' --data @slack_payload.json ${{ secrets.SLACK_WEBHOOK_URL }}
         
     - name: Send Telegram notification
       if: steps.check_status.outputs.STATUS_CHANGED == 'true'
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        CHANGES: ${{ steps.check_status.outputs.CHANGES }}
       run: |
-        MESSAGE="🎫 *MikuExpo Ticket Status Changed!*
+        MESSAGE_TEXT="🎫 *MikuExpo Ticket Status Changed!*\n\n${CHANGES}\n\n🎉 Tickets might be available now!\n\n🔗 [Check MikuExpo Website](https://mikuexpo.com/asia2025/)\n\n⏰ Checked at: $(date -u)"
+
+        JSON_PAYLOAD=$(jq -n \
+          --arg chat_id "$TELEGRAM_CHAT_ID" \
+          --arg text "$MESSAGE_TEXT" \
+          '{chat_id: $chat_id, text: $text, parse_mode: "Markdown", disable_web_page_preview: false}')
         
-        ${{ steps.check_status.outputs.CHANGES }}
-        
-        🎉 Tickets might be available now!
-        
-        🔗 [Check MikuExpo Website](https://mikuexpo.com/asia2025/)
-        
-        ⏰ Checked at: $(date -u)"
-        
-        curl -X POST \
-        -H 'Content-Type: application/json' \
-        -d "{\"chat_id\": \"${{ secrets.TELEGRAM_CHAT_ID }}\", \"text\": \"$MESSAGE\", \"parse_mode\": \"Markdown\", \"disable_web_page_preview\": false}" \
-        https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage
+        curl -X POST -H 'Content-Type: application/json' -d "$JSON_PAYLOAD" "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
