@@ -6,7 +6,7 @@ on:
 
 jobs:
   monitor:
-    runs-on: self-hosted
+    runs-on: justbecause-standard-ci
     
     steps:
     - name: Checkout repository
