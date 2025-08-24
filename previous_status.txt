@@ -1,1 +1,1 @@
-Coming Soon
+{"Bangkok":"TICKET","Hong Kong":"TICKET","Jakarta":"TICKET","Manila":"TICKET","Singapore":"TICKET","Kuala Lumpur":"TICKET","Taipei":"Coming Soon","Seoul":"TICKET"}
